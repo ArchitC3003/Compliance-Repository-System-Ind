@@ -121,17 +121,30 @@ function useAppReducerWithSupabase(reducer, initialState) {
 
     // 2. Mirror to Supabase
     try {
+      let result;
       switch (action.type) {
         case 'ADD_REPOSITORY':
-          await supabase.from('repositories').insert([{
+          result = await supabase.from('repositories').insert([{
              id: action.payload.id,
              name: action.payload.name,
              description: action.payload.description,
              created_at: action.payload.createdAt
           }]);
+          if (result.error) throw result.error;
+          break;
+        case 'UPDATE_REPOSITORY':
+          result = await supabase.from('repositories').update({
+             name: action.payload.name,
+             description: action.payload.description,
+          }).eq('id', action.payload.id);
+          if (result.error) throw result.error;
+          break;
+        case 'DELETE_REPOSITORY':
+          result = await supabase.from('repositories').delete().eq('id', action.payload);
+          if (result.error) throw result.error;
           break;
         case 'ADD_SUB_REPOSITORY':
-          await supabase.from('sub_repositories').insert([{
+          result = await supabase.from('sub_repositories').insert([{
              id: action.payload.id,
              repository_id: action.payload.repositoryId,
              name: action.payload.name,
@@ -141,9 +154,24 @@ function useAppReducerWithSupabase(reducer, initialState) {
              last_upload: action.payload.lastUpload,
              created_at: action.payload.createdAt
           }]);
+          if (result.error) throw result.error;
+          break;
+        case 'UPDATE_SUB_REPOSITORY':
+          result = await supabase.from('sub_repositories').update({
+             name: action.payload.name,
+             description: action.payload.description,
+             headers: action.payload.headers,
+             upload_count: action.payload.uploadCount,
+             last_upload: action.payload.lastUpload,
+          }).eq('id', action.payload.id);
+          if (result.error) throw result.error;
+          break;
+        case 'DELETE_SUB_REPOSITORY':
+          result = await supabase.from('sub_repositories').delete().eq('id', action.payload);
+          if (result.error) throw result.error;
           break;
         case 'ADD_UPLOAD':
-          await supabase.from('uploads').insert([{
+          result = await supabase.from('uploads').insert([{
              id: action.payload.id,
              sub_repository_id: action.payload.subRepositoryId,
              document_name: action.payload.documentName,
@@ -151,14 +179,20 @@ function useAppReducerWithSupabase(reducer, initialState) {
              committed: action.payload.committed,
              line_items: action.payload.lineItems
           }]);
+          if (result.error) throw result.error;
           break;
         case 'UPDATE_UPLOAD':
-          await supabase.from('uploads').update({
+          result = await supabase.from('uploads').update({
              line_items: action.payload.lineItems
           }).eq('id', action.payload.id);
+          if (result.error) throw result.error;
+          break;
+        case 'DELETE_UPLOAD':
+          result = await supabase.from('uploads').delete().eq('id', action.payload);
+          if (result.error) throw result.error;
           break;
         case 'ADD_AUDIT_LOG':
-          await supabase.from('audit_logs').insert([{
+          result = await supabase.from('audit_logs').insert([{
              id: action.payload.id,
              user_id: action.payload.userId,
              user_email: action.payload.userEmail,
@@ -166,11 +200,15 @@ function useAppReducerWithSupabase(reducer, initialState) {
              details: action.payload.details,
              timestamp: action.payload.timestamp
           }]);
+          if (result.error) throw result.error;
           break;
-        // DELETE operations can be added similarly
       }
     } catch (err) {
-      console.error('Supabase mirror error:', err);
+      console.error('Supabase sync error:', action.type, err);
+      dispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: { message: `Cloud sync failed: ${err.message || 'Unknown error'}`, variant: 'error' },
+      });
     }
   };
 

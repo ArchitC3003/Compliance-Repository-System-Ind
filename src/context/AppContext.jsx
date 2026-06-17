@@ -1,21 +1,17 @@
-import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
+import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../hooks/useAuth';
 
 const AppContext = createContext(null);
 
 const defaultState = {
-  session: {
-    user: { email: 'admin@crms.io', id: 'dev-user-1', displayName: 'Admin User' },
-    role: 'admin',
-  },
+  session: null,
   activePanel: 'dashboard',
   repositories: [],
   subRepositories: [],
   uploads: [],
   documentStore: [],
-  users: [
-    { id: 'dev-user-1', displayName: 'Admin User', email: 'admin@crms.io', role: 'admin', createdAt: '2026-01-01T00:00:00Z' },
-  ],
+  users: [],
   auditLog: [],
   notifications: [],
   isLoading: true,
@@ -30,12 +26,13 @@ function appReducer(state, action) {
         subRepositories: action.payload.subRepositories || [],
         uploads: action.payload.uploads || [],
         auditLog: action.payload.auditLog || [],
+        users: action.payload.users || [],
         isLoading: false,
       };
     case 'SET_SESSION':
       return { ...state, session: action.payload };
     case 'CLEAR_SESSION':
-      return { ...state, session: null, activePanel: 'dashboard' };
+      return { ...defaultState, session: null, isLoading: false };
     case 'SET_ACTIVE_PANEL':
       return { ...state, activePanel: action.payload };
     case 'ADD_REPOSITORY':
@@ -202,6 +199,28 @@ function useAppReducerWithSupabase(reducer, initialState) {
           }]);
           if (result.error) throw result.error;
           break;
+        case 'ADD_USER':
+          result = await supabase.from('users').insert([{
+             id: action.payload.id,
+             auth_id: action.payload.authId,
+             email: action.payload.email,
+             display_name: action.payload.displayName,
+             role: action.payload.role,
+             created_at: action.payload.createdAt
+          }]);
+          if (result.error) throw result.error;
+          break;
+        case 'UPDATE_USER':
+          result = await supabase.from('users').update({
+             display_name: action.payload.displayName,
+             role: action.payload.role,
+          }).eq('id', action.payload.id);
+          if (result.error) throw result.error;
+          break;
+        case 'DELETE_USER':
+          result = await supabase.from('users').delete().eq('id', action.payload);
+          if (result.error) throw result.error;
+          break;
       }
     } catch (err) {
       console.error('Supabase sync error:', action.type, err);
@@ -217,25 +236,50 @@ function useAppReducerWithSupabase(reducer, initialState) {
 
 export function AppProvider({ children }) {
   const [state, dispatchWithSupabase, rawDispatch] = useAppReducerWithSupabase(appReducer, defaultState);
+  const auth = useAuth();
 
-  // Initial Data Fetch
+  // Sync auth state to app context
   useEffect(() => {
+    if (auth.userProfile) {
+      rawDispatch({
+        type: 'SET_SESSION',
+        payload: {
+          user: {
+            id: auth.userProfile.id,
+            email: auth.userProfile.email,
+            displayName: auth.userProfile.displayName,
+          },
+          role: auth.userProfile.role,
+        },
+      });
+    } else if (!auth.loading) {
+      rawDispatch({ type: 'CLEAR_SESSION' });
+    }
+  }, [auth.userProfile, auth.loading, rawDispatch]);
+
+  // Initial Data Fetch — only when authenticated
+  useEffect(() => {
+    if (!auth.isAuthenticated) return;
+
     async function loadData() {
       try {
-        const [reposRes, subReposRes, uploadsRes, auditRes] = await Promise.all([
+        const [reposRes, subReposRes, uploadsRes, auditRes, usersRes] = await Promise.all([
           supabase.from('repositories').select('*'),
           supabase.from('sub_repositories').select('*'),
           supabase.from('uploads').select('*'),
-          supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }).limit(50),
+          supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }).limit(100),
+          supabase.from('users').select('*'),
         ]);
 
-        if (reposRes.error) console.error(reposRes.error);
+        if (reposRes.error) console.error('repos error:', reposRes.error);
+        if (subReposRes.error) console.error('subRepos error:', subReposRes.error);
+        if (uploadsRes.error) console.error('uploads error:', uploadsRes.error);
+        if (usersRes.error) console.error('users error:', usersRes.error);
 
-        // Map snake_case from DB back to camelCase for UI
         const mappedRepos = (reposRes.data || []).map(r => ({
           id: r.id, name: r.name, description: r.description, createdAt: r.created_at
         }));
-        
+
         const mappedSubRepos = (subReposRes.data || []).map(sr => ({
           id: sr.id, repositoryId: sr.repository_id, name: sr.name, description: sr.description,
           headers: sr.headers, uploadCount: sr.upload_count, lastUpload: sr.last_upload, createdAt: sr.created_at
@@ -250,6 +294,10 @@ export function AppProvider({ children }) {
           id: a.id, userId: a.user_id, userEmail: a.user_email, action: a.action, details: a.details, timestamp: a.timestamp
         }));
 
+        const mappedUsers = (usersRes.data || []).map(u => ({
+          id: u.id, authId: u.auth_id, displayName: u.display_name, email: u.email, role: u.role, createdAt: u.created_at
+        }));
+
         rawDispatch({
           type: 'LOAD_INITIAL_DATA',
           payload: {
@@ -257,21 +305,22 @@ export function AppProvider({ children }) {
             subRepositories: mappedSubRepos,
             uploads: mappedUploads,
             auditLog: mappedAudit,
+            users: mappedUsers,
           }
         });
       } catch (err) {
         console.error('Failed to load initial data from Supabase', err);
-        rawDispatch({ type: 'LOAD_INITIAL_DATA', payload: {} }); // Fallback to empty
+        rawDispatch({ type: 'LOAD_INITIAL_DATA', payload: {} });
       }
     }
 
     loadData();
-  }, [rawDispatch]);
+  }, [auth.isAuthenticated, rawDispatch]);
 
   return (
-    <AppContext.Provider value={{ state, dispatch: dispatchWithSupabase }}>
-      {state.isLoading ? (
-        <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0f1a', color: '#10b981' }}>
+    <AppContext.Provider value={{ state, dispatch: dispatchWithSupabase, auth }}>
+      {state.isLoading && auth.isAuthenticated ? (
+        <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0f1a', color: '#10b981', fontFamily: "'Inter', sans-serif" }}>
           Loading Cloud Database...
         </div>
       ) : (

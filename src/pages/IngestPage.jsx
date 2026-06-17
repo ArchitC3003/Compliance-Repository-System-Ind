@@ -4,7 +4,7 @@ import { useAppContext } from '../context/AppContext';
 import { parseFile } from '../lib/parseFile';
 
 export default function IngestPage() {
-  const { state, dispatch } = useAppContext();
+  const { state, dispatch, auth } = useAppContext();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedSubRepoId, setSelectedSubRepoId] = useState('');
@@ -16,7 +16,7 @@ export default function IngestPage() {
   const fileInputRef = useRef(null);
   const fileRef = useRef(null);
 
-  const isAdmin = state.session?.role === 'admin';
+  const isAdmin = auth.isAdmin;
 
   const selectedSubRepo = useMemo(
     () => state.subRepositories.find(sr => sr.id === selectedSubRepoId) || null,
@@ -127,7 +127,7 @@ export default function IngestPage() {
       id: uploadId,
       documentName: fileName,
       subRepositoryId: selectedSubRepo.id,
-      uploadedBy: state.session.user.id,
+      uploadedBy: auth.userProfile?.id || 'system',
       uploadDate: new Date().toISOString(),
       headers: canonicalHeaders,
       rowCount: mappedRows.length,
@@ -176,7 +176,7 @@ export default function IngestPage() {
       type: 'ADD_AUDIT_LOG',
       payload: {
         id: crypto.randomUUID(),
-        actor: state.session.user.email,
+        actor: auth.userProfile?.email || 'system',
         action: 'Committed upload',
         target: `${fileName} → ${selectedSubRepo.name} (${mappedRows.length} rows)`,
         timestamp: new Date().toISOString(),

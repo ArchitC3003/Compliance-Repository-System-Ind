@@ -4,7 +4,7 @@ import { useAppContext } from '../context/AppContext';
 import { ERM_HEADER_PRESET } from '../data/ermHeaders';
 
 export default function RepositoryPage() {
-  const { state, dispatch } = useAppContext();
+  const { state, dispatch, auth } = useAppContext();
 
   // Local UI state
   const [selectedRepoId, setSelectedRepoId] = useState(null);
@@ -165,6 +165,7 @@ export default function RepositoryPage() {
       <div style={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ color: '#f9fafb', margin: 0, fontSize: 18, fontWeight: 600 }}>Repositories</h2>
+          {auth.isAdmin && (
           <button
             className="btn-primary"
             style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '6px 14px' }}
@@ -172,12 +173,13 @@ export default function RepositoryPage() {
           >
             <Plus size={14} /> New Repository
           </button>
+          )}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {state.repositories.length === 0 ? (
             <p style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', marginTop: 32, lineHeight: 1.5 }}>
-              No repositories yet. Click + New Repository to begin.
+              No repositories yet. {auth.isAdmin && 'Click + New Repository to begin.'}
             </p>
           ) : (
             state.repositories.map(repo => (
@@ -219,6 +221,7 @@ export default function RepositoryPage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <h2 style={{ color: '#f9fafb', margin: 0, fontSize: 20, fontWeight: 600 }}>{selectedRepo.name}</h2>
+              {auth.isAdmin && (
               <button
                 className="btn-primary"
                 style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '6px 14px' }}
@@ -226,6 +229,7 @@ export default function RepositoryPage() {
               >
                 <Plus size={14} /> New Sub-Repository
               </button>
+              )}
             </div>
 
             {filteredSubRepos.length === 0 ? (

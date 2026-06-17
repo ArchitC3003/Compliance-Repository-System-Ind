@@ -6,7 +6,7 @@ import { useAppContext } from '../context/AppContext';
 const ROWS_PER_PAGE = 20;
 
 export default function ReportsPage() {
-  const { state, dispatch } = useAppContext();
+  const { state, dispatch, auth } = useAppContext();
 
   const [selectedSubRepoId, setSelectedSubRepoId] = useState('');
   const [activeFilters, setActiveFilters] = useState({});
@@ -203,8 +203,8 @@ export default function ReportsPage() {
       type: 'ADD_AUDIT_LOG',
       payload: {
         id: crypto.randomUUID(),
-        userId: state.session?.user?.id || 'system',
-        userEmail: state.session?.user?.email || 'admin@crms.io',
+        userId: auth.userProfile?.id || 'system',
+        userEmail: auth.userProfile?.email || 'system',
         action: 'LIVE_EDIT',
         details: `Updated field [${fieldName}] from "${oldValue || ''}" to "${editingValue}" in sub-repository [${selectedSubRepo?.name || ''}]`,
         timestamp: new Date().toISOString(),
@@ -512,7 +512,7 @@ export default function ReportsPage() {
             </div>
 
             {/* Admin Live Edit Banner */}
-            {state.session?.role === 'admin' && (
+            {auth.isAdmin && (
               <div style={{
                 padding: '10px 24px',
                 background: 'rgba(16, 185, 129, 0.08)',
@@ -535,7 +535,7 @@ export default function ReportsPage() {
                 const value = selectedRow[h.name];
                 const hasContent = value !== undefined && value !== null && value !== '';
                 const isEditing = editingField === h.name;
-                const isAdmin = state.session?.role === 'admin';
+                const isAdmin = auth.isAdmin;
 
                 if (isEditing) {
                   return (

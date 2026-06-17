@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
+import { supabase } from '../lib/supabase';
 import {
   Trash2, ShieldCheck, Shield, Plus, X, Pencil, Eye,
   ChevronDown, ChevronUp,
@@ -8,14 +9,16 @@ import {
 const TABS = ['Users', 'Repositories', 'Sub-Repositories', 'Audit Log'];
 
 export default function AdminPage() {
-  const { state, dispatch } = useAppContext();
+  const { state, dispatch, auth } = useAppContext();
   const [activeTab, setActiveTab] = useState(0);
 
   // --- User modals ---
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserRole, setNewUserRole] = useState('member');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState('user');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [expandedUserId, setExpandedUserId] = useState(null);
 
   // --- Repo edit modal ---
@@ -58,9 +61,12 @@ export default function AdminPage() {
       type: 'ADD_AUDIT_LOG',
       payload: {
         id: crypto.randomUUID(),
-        actor: state.session.user.email,
+        userId: auth.userProfile?.id || 'system',
+        userEmail: auth.userProfile?.email || 'system',
+        actor: auth.userProfile?.email || 'system',
         action,
         target,
+        details: `${action}: ${target}`,
         timestamp: new Date().toISOString(),
       },
     });
@@ -69,39 +75,62 @@ export default function AdminPage() {
   // ==========================================
   // TAB 1 — USERS
   // ==========================================
-  const handleCreateUser = (e) => {
+  const handleCreateUser = async (e) => {
     e.preventDefault();
-    if (!newUserName.trim() || !newUserEmail.trim()) return;
+    if (!newUserName.trim() || !newUserEmail.trim() || !newUserPassword.trim()) return;
+    if (newUserPassword.trim().length < 6) {
+      dispatch({ type: 'ADD_NOTIFICATION', payload: { message: 'Password must be at least 6 characters', variant: 'error' } });
+      return;
+    }
     if (state.users.some(u => u.email.toLowerCase() === newUserEmail.trim().toLowerCase())) {
       dispatch({ type: 'ADD_NOTIFICATION', payload: { message: 'A user with this email already exists', variant: 'error' } });
       return;
     }
-    const newUser = {
-      id: crypto.randomUUID(),
-      displayName: newUserName.trim(),
-      email: newUserEmail.trim().toLowerCase(),
-      role: newUserRole,
-      createdAt: new Date().toISOString(),
-    };
-    dispatch({ type: 'ADD_USER', payload: newUser });
-    addAuditEntry('Created user', `${newUser.displayName} (${newUser.email})`);
-    dispatch({ type: 'ADD_NOTIFICATION', payload: { message: `User "${newUser.displayName}" created`, variant: 'success' } });
-    setNewUserName('');
-    setNewUserEmail('');
-    setNewUserRole('member');
-    setShowAddUserModal(false);
+    setIsCreatingUser(true);
+    try {
+      // 1. Create Supabase Auth account
+      const { data: authData, error: authErr } = await supabase.auth.signUp({
+        email: newUserEmail.trim().toLowerCase(),
+        password: newUserPassword.trim(),
+      });
+      if (authErr) throw authErr;
+
+      // 2. Create user profile in our users table
+      const newUser = {
+        id: crypto.randomUUID(),
+        authId: authData.user?.id || null,
+        displayName: newUserName.trim(),
+        email: newUserEmail.trim().toLowerCase(),
+        role: newUserRole,
+        createdAt: new Date().toISOString(),
+      };
+      dispatch({ type: 'ADD_USER', payload: newUser });
+      addAuditEntry('Created user', `${newUser.displayName} (${newUser.email}) as ${newUserRole}`);
+      dispatch({ type: 'ADD_NOTIFICATION', payload: { message: `User "${newUser.displayName}" created successfully`, variant: 'success' } });
+      setNewUserName('');
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserRole('user');
+      setShowAddUserModal(false);
+    } catch (err) {
+      dispatch({ type: 'ADD_NOTIFICATION', payload: { message: `Failed to create user: ${err.message}`, variant: 'error' } });
+    } finally {
+      setIsCreatingUser(false);
+    }
   };
 
-  const toggleUserRole = (user) => {
-    if (user.id === state.session.user.id) return;
-    const newRole = user.role === 'admin' ? 'member' : 'admin';
-    dispatch({ type: 'UPDATE_USER', payload: { id: user.id, role: newRole } });
+  const cycleUserRole = (user) => {
+    if (user.id === auth.userProfile?.id) return;
+    if (user.role === 'super_admin') return; // Can't change super admin
+    const newRole = user.role === 'admin' ? 'user' : 'admin';
+    dispatch({ type: 'UPDATE_USER', payload: { id: user.id, displayName: user.displayName, role: newRole } });
     addAuditEntry('Changed user role', `${user.displayName} → ${newRole}`);
     dispatch({ type: 'ADD_NOTIFICATION', payload: { message: `${user.displayName} is now ${newRole}`, variant: 'success' } });
   };
 
   const deleteUser = (user) => {
-    if (user.id === state.session.user.id) return; // can't delete yourself
+    if (user.id === auth.userProfile?.id) return; // can't delete yourself
+    if (user.role === 'super_admin') return; // can't delete super admin
     if (!window.confirm('Are you sure you want to delete this? This action cannot be undone.')) return;
     dispatch({ type: 'DELETE_USER', payload: user.id });
     addAuditEntry('Deleted user', `${user.displayName} (${user.email})`);
@@ -259,16 +288,16 @@ export default function AdminPage() {
                           </td>
                           <td>
                             <div style={{ display: 'flex', gap: 6 }}>
-                              {user.id !== state.session.user.id && (
+                              {user.id !== auth.userProfile?.id && user.role !== 'super_admin' && (
                               <button
                                 className="btn-secondary"
                                 style={{ padding: '4px 10px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                                onClick={() => toggleUserRole(user)}
+                                onClick={() => cycleUserRole(user)}
                               >
                                 {user.role === 'admin' ? <><Shield size={12} /> Demote</> : <><ShieldCheck size={12} /> Promote</>}
                               </button>
                               )}
-                              {user.id !== state.session.user.id && (
+                              {user.id !== auth.userProfile?.id && user.role !== 'super_admin' && (
                                 <button
                                   className="btn-danger"
                                   style={{ padding: '4px 10px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
@@ -478,15 +507,19 @@ export default function AdminPage() {
                 <input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder="user@company.com" required style={inputStyle} />
               </div>
               <div>
+                <label>Temporary Password</label>
+                <input type="password" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} placeholder="Min 6 characters" required style={inputStyle} />
+              </div>
+              <div>
                 <label>Role</label>
                 <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)} style={inputStyle}>
-                  <option value="member">Member</option>
+                  <option value="user">User</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button type="button" className="btn-secondary" onClick={() => setShowAddUserModal(false)}>Cancel</button>
-                <button type="submit" className="btn-primary">Create User</button>
+                <button type="submit" className="btn-primary" disabled={isCreatingUser}>{isCreatingUser ? 'Creating...' : 'Create User'}</button>
               </div>
             </form>
           </div>

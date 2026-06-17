@@ -1,169 +1,233 @@
 import React from 'react';
+import { LayoutDashboard, Database, Upload, FileText, Settings, LogOut, Shield } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import {
-  LayoutDashboard,
-  Database,
-  Upload,
-  FileText,
-  Settings,
-  LogOut,
-} from 'lucide-react';
 
 const navItems = [
-  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { key: 'repository', label: 'Repository', icon: Database },
-  { key: 'ingest', label: 'Ingest', icon: Upload },
-  { key: 'reports', label: 'Reports', icon: FileText },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'user'] },
+  { id: 'repository', label: 'Repository', icon: Database, roles: ['super_admin', 'admin', 'user'] },
+  { id: 'ingest', label: 'Ingest', icon: Upload, roles: ['super_admin', 'admin', 'user'] },
+  { id: 'reports', label: 'Reports', icon: FileText, roles: ['super_admin', 'admin', 'user'] },
+  { id: 'admin', label: 'Admin Panel', icon: Settings, roles: ['super_admin', 'admin'] },
 ];
 
-const adminItem = { key: 'admin', label: 'Admin', icon: Settings };
-
 export default function Sidebar() {
-  const { state, dispatch } = useAppContext();
-  const activePanel = state.activePanel;
-  const session = state.session;
+  const { state, dispatch, auth } = useAppContext();
+  const userRole = auth.userProfile?.role || 'user';
 
-  const items = session?.role === 'admin'
-    ? [...navItems, adminItem]
-    : navItems;
+  const handleNav = (panelId) => {
+    dispatch({ type: 'SET_ACTIVE_PANEL', payload: panelId });
+  };
+
+  const handleSignOut = async () => {
+    await auth.logout();
+  };
+
+  const getRoleBadge = (role) => {
+    switch (role) {
+      case 'super_admin': return { label: 'Super Admin', color: '#f59e0b' };
+      case 'admin': return { label: 'Admin', color: '#10b981' };
+      default: return { label: 'User', color: '#6b7280' };
+    }
+  };
+
+  const badge = getRoleBadge(userRole);
 
   return (
-    <aside
-      style={{
-        width: 240,
-        minWidth: 240,
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        borderRight: '1px solid var(--color-border)',
-        background: 'var(--color-surface)',
-      }}
-    >
+    <aside style={styles.sidebar}>
       {/* Brand */}
-      <div
-        style={{
-          padding: '24px 20px 20px',
-          borderBottom: '1px solid var(--color-border)',
-        }}
-      >
-        <span
-          style={{
-            fontSize: 20,
-            fontWeight: 700,
-            color: '#10b981',
-            letterSpacing: '-0.5px',
-          }}
-        >
-          CRMS
-        </span>
+      <div style={styles.brand}>
+        <div style={styles.brandIcon}>
+          <Shield size={22} color="#10b981" />
+        </div>
+        <div>
+          <div style={styles.brandTitle}>CRMS</div>
+          <div style={styles.brandSub}>Compliance Repository</div>
+        </div>
       </div>
 
       {/* Navigation */}
-      <nav style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }}>
-        {items.map(({ key, label, icon: Icon }) => {
-          const isActive = activePanel === key;
-          return (
-            <button
-              key={key}
-              onClick={() =>
-                dispatch({ type: 'SET_ACTIVE_PANEL', payload: key })
-              }
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                width: '100%',
-                padding: '10px 20px',
-                border: 'none',
-                borderLeft: isActive
-                  ? '3px solid #10b981'
-                  : '3px solid transparent',
-                background: isActive
-                  ? 'rgba(16, 185, 129, 0.06)'
-                  : 'transparent',
-                color: isActive
-                  ? 'var(--color-text-primary)'
-                  : 'var(--color-text-secondary)',
-                fontFamily: 'var(--font-family)',
-                fontSize: 14,
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'background 200ms ease, color 200ms ease',
-                textAlign: 'left',
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = isActive
-                  ? 'rgba(16, 185, 129, 0.06)'
-                  : 'transparent';
-              }}
-            >
-              <Icon size={18} />
-              {label}
-            </button>
-          );
-        })}
+      <nav style={styles.nav}>
+        {navItems
+          .filter(item => item.roles.includes(userRole))
+          .map(item => {
+            const Icon = item.icon;
+            const isActive = state.activePanel === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleNav(item.id)}
+                style={{
+                  ...styles.navItem,
+                  ...(isActive ? styles.navItemActive : {}),
+                }}
+              >
+                <Icon size={18} color={isActive ? '#10b981' : '#9ca3af'} />
+                <span style={{ color: isActive ? '#f9fafb' : '#9ca3af' }}>{item.label}</span>
+              </button>
+            );
+          })}
       </nav>
 
-      {/* User info */}
-      {session && (
-        <div
-          style={{
-            padding: '16px 20px',
-            borderTop: '1px solid var(--color-border)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-          }}
-        >
-          <div>
-            <div
-              style={{
-                fontSize: 13,
-                color: 'var(--color-text-primary)',
-                marginBottom: 4,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {session.user?.email}
-            </div>
-            <span className={`badge ${session.role === 'admin' ? 'badge-success' : ''}`}>
-              {session.role}
+      {/* User Info */}
+      <div style={styles.userSection}>
+        <div style={styles.userInfo}>
+          <div style={styles.avatar}>
+            {(auth.userProfile?.displayName || auth.userProfile?.email || '?')[0].toUpperCase()}
+          </div>
+          <div style={styles.userDetails}>
+            <div style={styles.userName}>{auth.userProfile?.displayName || 'User'}</div>
+            <div style={styles.userEmail}>{auth.userProfile?.email}</div>
+            <span style={{ ...styles.roleBadge, borderColor: badge.color, color: badge.color }}>
+              {badge.label}
             </span>
           </div>
-          <button
-            onClick={() => dispatch({ type: 'CLEAR_SESSION' })}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 0',
-              border: 'none',
-              background: 'transparent',
-              color: 'var(--color-text-secondary)',
-              fontFamily: 'var(--font-family)',
-              fontSize: 13,
-              cursor: 'pointer',
-              transition: 'color 200ms ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'var(--color-danger)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'var(--color-text-secondary)';
-            }}
-          >
-            <LogOut size={15} />
-            Sign out
-          </button>
         </div>
-      )}
+        <button onClick={handleSignOut} style={styles.signOutBtn} title="Sign Out">
+          <LogOut size={16} />
+        </button>
+      </div>
     </aside>
   );
 }
+
+const styles = {
+  sidebar: {
+    width: '240px',
+    minWidth: '240px',
+    height: '100vh',
+    background: '#111827',
+    borderRight: '1px solid rgba(75, 85, 99, 0.3)',
+    display: 'flex',
+    flexDirection: 'column',
+    fontFamily: "'Inter', sans-serif",
+    position: 'sticky',
+    top: 0,
+  },
+  brand: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '20px 16px',
+    borderBottom: '1px solid rgba(75, 85, 99, 0.2)',
+  },
+  brandIcon: {
+    width: '38px',
+    height: '38px',
+    borderRadius: '10px',
+    background: 'rgba(16, 185, 129, 0.1)',
+    border: '1px solid rgba(16, 185, 129, 0.2)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  brandTitle: {
+    fontSize: '17px',
+    fontWeight: '700',
+    color: '#f9fafb',
+    letterSpacing: '1.5px',
+  },
+  brandSub: {
+    fontSize: '10px',
+    color: '#6b7280',
+    letterSpacing: '0.5px',
+  },
+  nav: {
+    flex: 1,
+    padding: '12px 8px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  navItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '10px 12px',
+    border: 'none',
+    background: 'transparent',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '500',
+    fontFamily: "'Inter', sans-serif",
+    transition: 'background 0.15s',
+    width: '100%',
+    textAlign: 'left',
+  },
+  navItemActive: {
+    background: 'rgba(16, 185, 129, 0.1)',
+    border: '1px solid rgba(16, 185, 129, 0.15)',
+  },
+  userSection: {
+    padding: '12px',
+    borderTop: '1px solid rgba(75, 85, 99, 0.2)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+  },
+  userInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flex: 1,
+    minWidth: 0,
+  },
+  avatar: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    background: 'rgba(16, 185, 129, 0.15)',
+    color: '#10b981',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '13px',
+    fontWeight: '600',
+    flexShrink: 0,
+  },
+  userDetails: {
+    minWidth: 0,
+  },
+  userName: {
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#e5e7eb',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  userEmail: {
+    fontSize: '10px',
+    color: '#6b7280',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  roleBadge: {
+    display: 'inline-block',
+    fontSize: '9px',
+    fontWeight: '600',
+    padding: '1px 6px',
+    border: '1px solid',
+    borderRadius: '4px',
+    letterSpacing: '0.3px',
+    marginTop: '2px',
+    textTransform: 'uppercase',
+  },
+  signOutBtn: {
+    width: '32px',
+    height: '32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid rgba(75, 85, 99, 0.3)',
+    borderRadius: '8px',
+    background: 'transparent',
+    color: '#9ca3af',
+    cursor: 'pointer',
+    transition: 'background 0.15s, color 0.15s',
+    flexShrink: 0,
+  },
+};

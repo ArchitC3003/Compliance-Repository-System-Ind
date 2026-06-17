@@ -1,13 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://zasxtetwwvmntqaarqpi.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inphc3h0ZXR3d3ZtbnRxYWFycXBpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0NTg3MzEsImV4cCI6MjA5NzAzNDczMX0.sUE3oW0kYxbxLeCvEA-Z8imvOmXS2cx3j8dHLgQEqPM';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('CRMS: Missing Supabase environment variables. Database integration will fail.');
-}
-
-export const supabase = createClient(
-  supabaseUrl || 'https://dummy-fallback.supabase.co', 
-  supabaseAnonKey || 'dummy-key-fallback'
-);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
